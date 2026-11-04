@@ -519,6 +519,39 @@ private fun MainEditor(
                     OutlinedTextField(value = script, onValueChange = { script = it }, label = { Text("Paste script") },
                         modifier = Modifier.fillMaxWidth(), minLines = 6)
                     val scenes = remember(script) { EditorLogic.splitScript(script) }
+                    Text("For an MP4, import your own video in Studio. Audio narration can be created in Narration.", color = Color.LightGray, fontSize = 12.sp)
+                    Button(onClick = {
+                        captions = ClipLogic.captionsFromScript(script, 0L, duration)
+                        status = "Script converted into " + captions.size + " timed captions. Review in Transcript."
+                        nav = "Transcript"
+                    }, enabled = script.isNotBlank() && duration > 0L) {
+                        Text("Turn script into timed captions")
+                    }
+                    Button(onClick = {
+                        val source = mainUri
+                        if (source != null && script.isNotBlank()) {
+                            exporting = true
+                            status = "Rendering script over your imported video…"
+                            val scriptCues = ClipLogic.captionsFromScript(script, 0L, duration)
+                            exporter.export(MediaExporter.Request(
+                                main = source, second = secondUri, mainOnTop = mainTop, aspect = aspect,
+                                fillMain = !fitMain, fillSecond = !fitSecond,
+                                startMs = 0L, endMs = duration, captions = scriptCues,
+                                captionX = captionX, captionY = captionY, captionColor = captionColor,
+                                captionSizePx = captionSize, narration = narrationUri,
+                                autoCuts = emptyList()
+                            )) { result ->
+                                exporting = false
+                                result.onSuccess { uri ->
+                                    captions = scriptCues
+                                    status = "Script-based video saved: " + uri.toString()
+                                }.onFailure { status = "Script video export failed: " + it.message }
+                            }
+                        }
+                    }, enabled = mainUri != null && duration > 0 && script.isNotBlank() && !exporting, modifier = Modifier.fillMaxWidth()) {
+                        Text("Render script video with imported footage")
+                    }
+                    Text("This renders the script as captions over supplied footage; it does not generate AI scene visuals.", color = Color.LightGray, fontSize = 11.sp)
                     Text("${script.split(Regex("\\s+")).count { it.isNotBlank() }} words → ${scenes.size} scenes (max 30; no missing words)", color = Cyan)
                     scenes.take(30).forEach { scene ->
                         Text("Scene ${scene.number} · ${scene.estimatedMs / 1000}s · ${scene.text.take(110)}…",

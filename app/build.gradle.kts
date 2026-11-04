@@ -9,11 +9,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.masteryofclips.shayan.mobile"
+        applicationId = "com.masteryofclips.shayan.masterstudio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-android-beta"
+        versionCode = 3
+        versionName = "0.3.0-master-studio-beta"
     }
     buildTypes {
         release { isMinifyEnabled = false }
