@@ -42,6 +42,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.9.0")
     implementation("androidx.media3:media3-transformer:1.9.0")
     implementation("androidx.media3:media3-effect:1.9.0")
+    implementation("com.alphacephei:vosk-android:0.3.75")
     implementation("org.bouncycastle:bcprov-jdk18on:1.81")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
