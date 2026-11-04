@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.os.Build
 import android.provider.MediaStore
 import android.text.SpannableString
 import android.text.style.AbsoluteSizeSpan
@@ -169,6 +170,14 @@ class MediaExporter(private val context: Context) {
 
     private fun saveToGallery(src: File): Uri {
         if (!src.exists() || src.length() < 1024) throw IOException("Media3 did not create a playable-sized MP4")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val base = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir
+            val dir = File(base, "MCS")
+            if (!dir.exists() && !dir.mkdirs()) throw IOException("Cannot create Movies/MCS")
+            val dest = File(dir, "MCS_${System.currentTimeMillis()}.mp4")
+            FileInputStream(src).use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+            return Uri.fromFile(dest)
+        }
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, "MCS_${System.currentTimeMillis()}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")

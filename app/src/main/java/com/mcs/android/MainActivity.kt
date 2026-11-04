@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -96,7 +98,7 @@ private fun ActivationScreen(license: LicenseManager, message: String, onActivat
         Modifier.fillMaxSize().background(CanvasBg).padding(24.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("MCS", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Purple)
+        Image(painterResource(R.drawable.mcs_launcher_v24), "MCS logo", Modifier.size(92.dp))
         Text("Mastery of Clips with Shayan", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(22.dp))
         Text("Device ID", color = Cyan)
@@ -207,11 +209,11 @@ private fun MainEditor(
 
     Column(Modifier.fillMaxSize().background(CanvasBg)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("MCS", fontSize = 24.sp, color = Purple, fontWeight = FontWeight.Black)
+            Image(painterResource(R.drawable.mcs_launcher_v24), "MCS logo", Modifier.size(42.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("Mastery of Clips", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text("ANDROID STUDIO · v0.1", fontSize = 9.sp, color = Color.LightGray)
+                Text("MCS MOBILE · v0.2 BETA", fontSize = 9.sp, color = Color.LightGray)
             }
             Text(license.deviceId.takeLast(4), fontSize = 11.sp, color = Cyan)
         }
