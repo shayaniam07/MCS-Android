@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -130,6 +131,9 @@ private fun MainEditor(
     var fitMain by remember { mutableStateOf(true) }
     var fitSecond by remember { mutableStateOf(true) }
     var captions by remember { mutableStateOf(listOf<CaptionCue>()) }
+    var clips by remember { mutableStateOf(listOf<ClipSegment>()) }
+    val projectStore = remember(ctx) { ProjectStore(ctx) }
+    var savedProjectNames by remember { mutableStateOf(projectStore.names()) }
     var captionText by remember { mutableStateOf("") }
     var captionX by remember { mutableFloatStateOf(0.5f) }
     var captionY by remember { mutableFloatStateOf(0.74f) }
@@ -158,13 +162,28 @@ private fun MainEditor(
         runCatching { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
     }
     val importMain = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) { persist(uri); mainUri = uri; autoCuts = emptyList(); trimStart = 0; trimEnd = 0; status = "Main video imported" }
+        if (uri != null) {
+            persist(uri); mainUri = uri; autoCuts = emptyList(); clips = emptyList()
+            captions = emptyList(); trimStart = 0; trimEnd = 0; duration = 0
+            status = "Main video imported — open Clips or Transcript to begin"
+        }
     }
     val importSecond = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) { persist(uri); secondUri = uri; status = "Second video added to Studio Preview" }
     }
     val importVoice = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) { persist(uri); narrationUri = uri; status = "Audio imported — choose Export to mix it with the video" }
+    }
+    val exportSrt = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) { uri ->
+        if (uri != null) {
+            runCatching {
+                val data = EditorLogic.toSrt(captions)
+                require(data.isNotBlank()) { "No captions to export" }
+                ctx.contentResolver.openOutputStream(uri)?.use { it.write(data.toByteArray(Charsets.UTF_8)) }
+                    ?: error("Cannot create SRT file")
+            }.onSuccess { status = "Timed captions exported as SRT" }
+             .onFailure { status = "SRT export failed: " + it.message }
+        }
     }
     val importSrt = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -204,6 +223,38 @@ private fun MainEditor(
         }
     }
 
+    fun bulkExportChecked() {
+        val source = mainUri
+        if (source == null || exporting) return
+        val chosen = clips.filter { it.selected && it.endMs > it.startMs }
+        if (chosen.isEmpty()) { status = "Check at least one clip in Clips"; return }
+        exporting = true
+        var savedCount = 0
+        val errors = mutableListOf<String>()
+        fun exportNext(index: Int) {
+            if (index >= chosen.size) {
+                exporting = false
+                status = "Bulk export finished: " + savedCount + "/" + chosen.size + " MP4s in Movies/MCS" +
+                    if (errors.isNotEmpty()) " — failures: " + errors.take(2).joinToString("; ") else ""
+                return
+            }
+            val clip = chosen[index]
+            status = "Exporting short " + (index + 1) + " of " + chosen.size + ": " + clip.label
+            exporter.export(MediaExporter.Request(
+                main = source, second = secondUri, mainOnTop = mainTop, aspect = aspect,
+                fillMain = !fitMain, fillSecond = !fitSecond,
+                startMs = clip.startMs, endMs = clip.endMs, captions = captions,
+                captionX = captionX, captionY = captionY, captionColor = captionColor,
+                captionSizePx = captionSize, narration = null, autoCuts = emptyList()
+            )) { result ->
+                result.onSuccess { savedCount++ }
+                    .onFailure { errors.add(clip.label + ": " + (it.message ?: "export error")) }
+                exportNext(index + 1)
+            }
+        }
+        exportNext(0)
+    }
+
     val ratio = when (aspect) { "16:9" -> 16f / 9f; "1:1" -> 1f; else -> 9f / 16f }
     val visibleCaption = if (captions.isEmpty()) captionText else EditorLogic.activeCaption(captions, playhead)
 
@@ -213,16 +264,15 @@ private fun MainEditor(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("Mastery of Clips", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text("MCS MOBILE · v0.2 BETA", fontSize = 9.sp, color = Color.LightGray)
+                Text("MASTER STUDIO · ANDROID v0.3", fontSize = 9.sp, color = Color.LightGray)
             }
             Text(license.deviceId.takeLast(4), fontSize = 11.sp, color = Cyan)
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Studio", "Captions", "Narration", "Script").forEach { tab ->
-                FilterChip(
-                    selected = nav == tab, onClick = { nav = tab }, label = { Text(tab, fontSize = 11.sp) },
-                    modifier = Modifier.weight(1f)
-                )
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            listOf("Studio", "Transcript", "Clips", "Captions", "Narration", "Script", "Projects").forEach { tab ->
+                FilterChip(selected = nav == tab, onClick = { nav = tab },
+                    label = { Text(tab, fontSize = 12.sp) })
             }
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
@@ -257,6 +307,82 @@ private fun MainEditor(
             }
             Spacer(Modifier.height(8.dp))
             when (nav) {
+                "Transcript" -> {
+                    MCSTranscriptPanel(
+                        cues = captions, durationMs = duration,
+                        onImport = { importSrt.launch(arrayOf("text/*", "application/x-subrip", "*/*")) },
+                        onExport = { exportSrt.launch("MCS_Captions.srt") },
+                        onUpdate = { captions = it; status = "Transcript changed — save your project" },
+                        onJump = { mainPlayer.seekTo(it) },
+                        onGenerate = {
+                            val source = script.ifBlank { voiceText }
+                            if (source.isNotBlank()) {
+                                captions = ClipLogic.captionsFromScript(source, 0, duration)
+                                status = "Generated " + captions.size + " estimated captions; review timing"
+                            }
+                        },
+                        scriptAvailable = script.isNotBlank() || voiceText.isNotBlank()
+                    )
+                }
+                "Clips" -> {
+                    MCSClipsPanel(
+                        hasVideo = mainUri != null, durationMs = duration, playheadMs = playhead,
+                        clips = clips, hasTranscript = captions.isNotEmpty(),
+                        onFixed = {
+                            clips = ClipLogic.fixed(duration, it)
+                            status = "Created " + clips.size + " shorts (" + it + "s target)"
+                        },
+                        onSpeech = {
+                            clips = ClipLogic.fromCaptions(captions, duration)
+                            status = "Created " + clips.size + " transcript-based shorts"
+                        },
+                        onChange = { clips = it },
+                        onJump = { start, end ->
+                            trimStart = start; trimEnd = end
+                            mainPlayer.pause(); secondPlayer.pause()
+                            mainPlayer.seekTo(start)
+                            status = "Reviewing clip " + formatClock(start) + " to " + formatClock(end)
+                        },
+                        onExportChecked = { bulkExportChecked() }
+                    )
+                }
+                "Projects" -> {
+                    MCSProjectsPanel(
+                        names = savedProjectNames, hasVideo = mainUri != null,
+                        onSave = { name ->
+                            runCatching {
+                                projectStore.save(MCSProject(
+                                    name, mainUri?.toString() ?: "", secondUri?.toString() ?: "",
+                                    narrationUri?.toString() ?: "", mainTop, aspect, fitMain, fitSecond,
+                                    captions, clips, captionX, captionY, captionColor, captionSize, script, voiceText
+                                ))
+                                savedProjectNames = projectStore.names()
+                            }.onSuccess { status = "Saved MCS project: " + name }
+                             .onFailure { status = "Project save failed: " + it.message }
+                        },
+                        onLoad = { name ->
+                            runCatching { projectStore.load(name) }
+                                .onSuccess { project ->
+                                    mainUri = project.mainUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                                    secondUri = project.secondUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                                    narrationUri = project.narrationUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                                    mainTop = project.mainOnTop; aspect = project.aspect
+                                    fitMain = project.fitMain; fitSecond = project.fitSecond
+                                    captions = project.cues; clips = project.clips
+                                    captionX = project.captionX; captionY = project.captionY
+                                    captionColor = project.captionColor; captionSize = project.captionSize
+                                    script = project.script; voiceText = project.voiceText
+                                    trimStart = 0; trimEnd = 0; duration = 0; autoCuts = emptyList()
+                                    nav = "Studio"; status = "Opened project: " + name
+                                }.onFailure { status = "Project open failed: " + it.message }
+                        },
+                        onDelete = { name ->
+                            projectStore.delete(name)
+                            savedProjectNames = projectStore.names()
+                            status = "Deleted project file: " + name
+                        }
+                    )
+                }
                 "Studio" -> {
                     SectionTitle("VIDEO EDITOR")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -373,7 +499,7 @@ private fun MainEditor(
                         TextButton(onClick = { narrationUri = null }) { Text("Remove narration") }
                     }
                 }
-                else -> {
+                "Script" -> {
                     SectionTitle("SCRIPT TO VIDEO · STORYBOARD")
                     Text("Script segmentation is offline. Supply your own media for full video creation.", fontSize = 12.sp, color = Color.LightGray)
                     OutlinedTextField(value = script, onValueChange = { script = it }, label = { Text("Paste script") },
