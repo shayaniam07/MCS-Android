@@ -153,6 +153,9 @@ private fun MainEditor(
     var playing by remember { mutableStateOf(false) }
     var script by remember { mutableStateOf("") }
     var voiceText by remember { mutableStateOf("") }
+    var voiceLanguage by remember { mutableStateOf("en-US") }
+    var voiceRate by remember { mutableFloatStateOf(0.95f) }
+    var voicePitch by remember { mutableFloatStateOf(1.0f) }
     val mainPlayer = remember { ExoPlayer.Builder(ctx).build() }
     val secondPlayer = remember { ExoPlayer.Builder(ctx).build().apply {
         volume = 0f; repeatMode = Player.REPEAT_MODE_ALL
@@ -482,10 +485,21 @@ private fun MainEditor(
                     Text("Android system voice narration is available. Custom Chatterbox voice cloning is not ported yet.", fontSize = 12.sp, color = Color.LightGray)
                     OutlinedTextField(value = voiceText, onValueChange = { voiceText = it }, label = { Text("Narration script") },
                         modifier = Modifier.fillMaxWidth(), minLines = 5)
+                    Text("SYSTEM VOICE LANGUAGE", color = Cyan, fontSize = 12.sp)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        listOf("English" to "en-US", "Urdu" to "ur-PK", "Hindi" to "hi-IN", "Spanish" to "es-ES").forEach { (label, tag) ->
+                            FilterChip(selected = voiceLanguage == tag, onClick = { voiceLanguage = tag }, label = { Text(label) })
+                        }
+                    }
+                    Text("Speed: " + String.format(Locale.US, "%.2f", voiceRate) + "×", color = Color.LightGray)
+                    Slider(value = voiceRate, onValueChange = { voiceRate = it }, valueRange = 0.6f..1.4f)
+                    Text("Pitch: " + String.format(Locale.US, "%.2f", voicePitch) + "×", color = Color.LightGray)
+                    Slider(value = voicePitch, onValueChange = { voicePitch = it }, valueRange = 0.7f..1.3f)
+                    Text("Long narration is generated in chunks and combined into one WAV. Voice availability depends on Android's installed TTS engine.", color = Color.LightGray, fontSize = 11.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             status = "Generating Android TTS audio…"
-                            narrator.synthesize(voiceText) { result ->
+                            narrator.synthesize(voiceText, languageTag = voiceLanguage, rate = voiceRate, pitch = voicePitch) { result ->
                                 (ctx as? android.app.Activity)?.runOnUiThread {
                                     result.onSuccess { file -> narrationUri = Uri.fromFile(file); status = "Narration created: ${file.name}" }
                                         .onFailure { status = "Narration failed: ${it.message}" }
