@@ -131,6 +131,9 @@ private fun MainEditor(
     var fitMain by remember { mutableStateOf(true) }
     var fitSecond by remember { mutableStateOf(true) }
     var captions by remember { mutableStateOf(listOf<CaptionCue>()) }
+    val offlineAsr = remember(ctx) { OfflineTranscriber(ctx) }
+    var transcribing by remember { mutableStateOf(false) }
+    var speechModelInstalled by remember { mutableStateOf(offlineAsr.hasModel()) }
     var clips by remember { mutableStateOf(listOf<ClipSegment>()) }
     val projectStore = remember(ctx) { ProjectStore(ctx) }
     var savedProjectNames by remember { mutableStateOf(projectStore.names()) }
@@ -311,6 +314,37 @@ private fun MainEditor(
             Spacer(Modifier.height(8.dp))
             when (nav) {
                 "Transcript" -> {
+                    SectionTitle("AUTOMATIC VIDEO TRANSCRIPTION · ENGLISH")
+                    Text("Free on-device speech recognition. The first run downloads a ~40 MB English model; afterward the video audio is processed locally. Requires enough phone memory.", color = Color.LightGray, fontSize = 12.sp)
+                    Button(onClick = {
+                        val source = mainUri
+                        if (source != null && !transcribing) {
+                            transcribing = true
+                            status = "Preparing free English transcription…"
+                            Thread {
+                                fun update(message: String) {
+                                    (ctx as? android.app.Activity)?.runOnUiThread { status = message }
+                                }
+                                val result = runCatching {
+                                    offlineAsr.ensureModel(::update)
+                                    offlineAsr.transcribeVideo(source, ::update)
+                                }
+                                (ctx as? android.app.Activity)?.runOnUiThread {
+                                    transcribing = false
+                                    speechModelInstalled = offlineAsr.hasModel()
+                                    result.onSuccess { recognized ->
+                                        captions = recognized
+                                        status = "Transcribed " + recognized.size + " editable caption segments — review timing and save your project"
+                                    }.onFailure { error ->
+                                        status = "Automatic transcription failed: " + (error.message ?: error.javaClass.simpleName)
+                                    }
+                                }
+                            }.start()
+                        }
+                    }, modifier = Modifier.fillMaxWidth(), enabled = mainUri != null && !transcribing) {
+                        Text(if (transcribing) "Processing video audio…" else
+                            if (speechModelInstalled) "Auto transcribe imported video" else "Download model & auto transcribe")
+                    }
                     MCSTranscriptPanel(
                         cues = captions, durationMs = duration,
                         onImport = { importSrt.launch(arrayOf("text/*", "application/x-subrip", "*/*")) },

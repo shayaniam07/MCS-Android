@@ -39,7 +39,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MCS-Master-Studio-v03-apk
+          name: MCS-Master-Studio-v04-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Enable KVM acceleration
