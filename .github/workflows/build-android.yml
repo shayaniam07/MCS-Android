@@ -30,9 +30,33 @@ jobs:
         run: yes | sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Unit tests and debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Verify APK signature and Android SDK requirements
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E '^(package:|sdkVersion:|targetSdkVersion:|application:|launchable-activity:)'
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MCS-Android-debug-apk
+          name: MCS-Android-v02-beta-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - name: Enable KVM acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch on Android 10 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 18
+        with:
+          api-level: 29
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.masteryofclips.shayan.mobile/com.mcs.android.MainActivity
+            sleep 6
+            adb shell pidof com.masteryofclips.shayan.mobile
