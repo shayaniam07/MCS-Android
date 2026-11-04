@@ -12,7 +12,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.graphics.Color
 import android.graphics.Typeface
-import android.util.Size
+import androidx.media3.common.util.Size
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
