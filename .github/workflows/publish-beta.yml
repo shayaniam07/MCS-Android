@@ -1,0 +1,32 @@
+name: Publish MCS Android beta APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download previously built Android APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download 41895389767 -R shayaniam07/MCS-Android --name MCS-Master-Studio-v04-apk --dir artifact
+          test -s artifact/app-debug.apk
+          cp artifact/app-debug.apk MCS-Master-Studio-v0.4-Android-beta.apk
+      - name: Publish beta release with binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=v0.4.0-android-beta
+          FILE=MCS-Master-Studio-v0.4-Android-beta.apk
+          NOTES="MCS Android beta v0.4.0. Not yet identical to the latest Windows EXE. Includes native editing, optional offline Vosk English transcription, clips, captions, system voices and script overlays. Android 10 emulator installation was tested on the earlier build."
+          if gh release view "$TAG" -R shayaniam07/MCS-Android >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" -R shayaniam07/MCS-Android --clobber
+          else
+            gh release create "$TAG" "$FILE" -R shayaniam07/MCS-Android --target 50a3e526f36c644110cd932aff8ab7c097af65b2 --title "MCS Master Studio Android v0.4 Beta" --notes "$NOTES" --prerelease
+          fi
